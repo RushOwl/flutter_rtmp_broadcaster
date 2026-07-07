@@ -134,7 +134,11 @@ class CameraNativeView(
             rtmpCamera.stopPreview()
         }
         isSurfaceCreated = false
-        activity = null
+        // NOTE: do NOT null `activity` here. The surface is destroyed and
+        // recreated on every window resize (e.g. leaving Picture-in-Picture),
+        // after which surfaceCreated -> startPreview needs `activity` to compute
+        // the preview size. Nulling it left the driver's preview black on return
+        // from PiP. `dispose()` still nulls it when the view is truly torn down.
     }
 
     override fun onConnectionStarted(url: String) {
