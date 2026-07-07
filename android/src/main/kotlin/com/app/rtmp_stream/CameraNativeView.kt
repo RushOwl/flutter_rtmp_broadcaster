@@ -119,7 +119,12 @@ class CameraNativeView(
     override fun surfaceCreated(holder: SurfaceHolder) {
         Log.d("CameraNativeView", "surfaceCreated")
         isSurfaceCreated = true
-        if (!rtmpCamera.isOnPreview) {
+        if (rtmpCamera.isStreaming) {
+            // Re-bind the LIVE stream's rendering to the recreated surface (e.g.
+            // after returning from Picture-in-Picture). startPreview() is a no-op
+            // while streaming, so without this the recreated surface stays black.
+            rtmpCamera.replaceView(glView)
+        } else if (!rtmpCamera.isOnPreview) {
             startPreview(cameraName)
         }
     }
@@ -130,15 +135,22 @@ class CameraNativeView(
 
     override fun surfaceDestroyed(p0: SurfaceHolder) {
         // TODO("Not yet implemented")
-        if (rtmpCamera.isOnPreview) {
+        if (rtmpCamera.isStreaming) {
+            // Surface is gone (e.g. entering PiP / window resize) but the stream
+            // must keep running: render to an off-screen context bound to the
+            // activity. surfaceCreated then swaps back to glView. This offscreen
+            // <-> glView swap also makes replaceView(glView) a real re-bind rather
+            // than a same-view no-op.
+            activity?.let { rtmpCamera.replaceView(it) }
+        } else if (rtmpCamera.isOnPreview) {
             rtmpCamera.stopPreview()
         }
         isSurfaceCreated = false
         // NOTE: do NOT null `activity` here. The surface is destroyed and
-        // recreated on every window resize (e.g. leaving Picture-in-Picture),
-        // after which surfaceCreated -> startPreview needs `activity` to compute
-        // the preview size. Nulling it left the driver's preview black on return
-        // from PiP. `dispose()` still nulls it when the view is truly torn down.
+        // recreated on every window resize (e.g. leaving Picture-in-Picture);
+        // surfaceCreated -> replaceView/startPreview need `activity` afterwards.
+        // Nulling it left the driver's preview black on return from PiP.
+        // `dispose()` still nulls it when the view is truly torn down.
     }
 
     override fun onConnectionStarted(url: String) {
